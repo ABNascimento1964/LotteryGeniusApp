@@ -2,6 +2,7 @@ import os
 import time
 import logging
 from typing import Dict, Any
+
 import requests
 from flask import Flask, jsonify
 
@@ -15,16 +16,16 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-# *** NOVO ENDPOINT DA CAIXA (CORRIGIDO) ***
+# *** ENDPOINT CORRIGIDO DA CAIXA ***
 CAIXA_LOTOFACIL_URL = "https://loterias.caixa.gov.br/portaldeloterias/api/lotofacil"
 
-# Cache simples
+# Cache simples em memória
 _last_result_cache: Dict[str, Any] = {}
 CACHE_TTL_SECONDS = 60  # 1 minuto
 
 
 # -----------------------------------------------------------------------------
-# Headers necessários para evitar 403 na API da Caixa
+# Headers para parecer navegador (evitar 403)
 # -----------------------------------------------------------------------------
 def _get_headers() -> Dict[str, str]:
     return {
@@ -41,7 +42,7 @@ def _get_headers() -> Dict[str, str]:
 
 
 # -----------------------------------------------------------------------------
-# Busca dados da Lotofácil na Caixa
+# Função que chama a API da Caixa
 # -----------------------------------------------------------------------------
 def fetch_lotofacil_from_caixa() -> Dict[str, Any]:
     session = requests.Session()
@@ -49,22 +50,29 @@ def fetch_lotofacil_from_caixa() -> Dict[str, Any]:
 
     for attempt in range(1, retries + 1):
         try:
-            logging.info(f"Tentando buscar Lotofácil (tentativa {attempt}/{retries})")
+            logging.info(
+                f"Tentando buscar Lotofácil na Caixa (tentativa {attempt}/{retries})"
+            )
             resp = session.get(
                 CAIXA_LOTOFACIL_URL,
                 headers=_get_headers(),
                 timeout=10,
             )
 
+            logging.info(f"Status code da Caixa: {resp.status_code}")
+
             if resp.status_code == 403:
                 raise RuntimeError("A API da Caixa retornou 403 (bloqueio).")
 
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            logging.info("Resposta JSON obtida com sucesso.")
+            return data
 
         except Exception as e:
             logging.warning(f"Erro na tentativa {attempt}: {e}")
             if attempt == retries:
+                logging.error("Falha definitiva ao chamar API da Caixa.")
                 raise
             time.sleep(2)
 
@@ -72,7 +80,7 @@ def fetch_lotofacil_from_caixa() -> Dict[str, Any]:
 
 
 # -----------------------------------------------------------------------------
-# Cache
+# Função com cache simples
 # -----------------------------------------------------------------------------
 def get_lotofacil_result() -> Dict[str, Any]:
     now = time.time()
@@ -81,8 +89,10 @@ def get_lotofacil_result() -> Dict[str, Any]:
         _last_result_cache
         and (now - _last_result_cache.get("timestamp", 0)) < CACHE_TTL_SECONDS
     ):
+        logging.info("Usando resultado em cache.")
         return _last_result_cache["data"]
 
+    logging.info("Cache expirado ou vazio. Buscando na Caixa...")
     data = fetch_lotofacil_from_caixa()
     _last_result_cache["data"] = data
     _last_result_cache["timestamp"] = now
@@ -99,13 +109,15 @@ def index():
             "status": "ok",
             "message": "LotteryGeniusApp está rodando 🚀",
             "endpoints": {
-                "lotofacil": "/lotofacil/ultimo",
-                "ping": "/ping"
+                "lotofacil_ultimo_sem_barra": "/lotofacil/ultimo",
+                "lotofacil_ultimo_com_barra": "/lotofacil/ultimo/",
+                "ping": "/ping",
             },
         }
     )
 
 
+# Aceita COM e SEM barra no final
 @app.route("/lotofacil/ultimo")
 @app.route("/lotofacil/ultimo/")
 def lotofacil_ultimo():
@@ -117,16 +129,13 @@ def lotofacil_ultimo():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-# -----------------------------------------------------------------------------
-# Rota de teste
-# -----------------------------------------------------------------------------
 @app.route("/ping")
 def ping():
     return "pong - app está rodando"
 
 
 # -----------------------------------------------------------------------------
-# Main
+# Main (para rodar localmente; no Render o gunicorn usa app:app)
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
