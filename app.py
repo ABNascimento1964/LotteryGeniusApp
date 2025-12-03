@@ -15,7 +15,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-CAIXA_LOTOFACIL_URL = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil"
+# *** NOVO ENDPOINT DA CAIXA (CORRIGIDO) ***
+CAIXA_LOTOFACIL_URL = "https://loterias.caixa.gov.br/portaldeloterias/api/lotofacil"
 
 # Cache simples
 _last_result_cache: Dict[str, Any] = {}
@@ -56,14 +57,13 @@ def fetch_lotofacil_from_caixa() -> Dict[str, Any]:
             )
 
             if resp.status_code == 403:
-                raise RuntimeError("Acesso proibido (403) pela API da Caixa.")
+                raise RuntimeError("A API da Caixa retornou 403 (bloqueio).")
 
             resp.raise_for_status()
-            data = resp.json()
-            return data
+            return resp.json()
 
         except Exception as e:
-            logging.warning(f"Erro: {e}")
+            logging.warning(f"Erro na tentativa {attempt}: {e}")
             if attempt == retries:
                 raise
             time.sleep(2)
@@ -107,6 +107,7 @@ def index():
 
 
 @app.route("/lotofacil/ultimo")
+@app.route("/lotofacil/ultimo/")
 def lotofacil_ultimo():
     try:
         data = get_lotofacil_result()
