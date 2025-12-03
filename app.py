@@ -16,7 +16,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-# *** ENDPOINT CORRIGIDO DA CAIXA ***
+# Endpoint da Lotofácil na Caixa (domínio principal, sem servicebus2)
 CAIXA_LOTOFACIL_URL = "https://loterias.caixa.gov.br/portaldeloterias/api/lotofacil"
 
 # Cache simples em memória
@@ -25,7 +25,7 @@ CACHE_TTL_SECONDS = 60  # 1 minuto
 
 
 # -----------------------------------------------------------------------------
-# Headers para parecer navegador (evitar 403)
+# Headers para parecer navegador (ajuda a evitar 403)
 # -----------------------------------------------------------------------------
 def _get_headers() -> Dict[str, str]:
     return {
@@ -42,7 +42,7 @@ def _get_headers() -> Dict[str, str]:
 
 
 # -----------------------------------------------------------------------------
-# Função que chama a API da Caixa
+# Chamada da API da Caixa
 # -----------------------------------------------------------------------------
 def fetch_lotofacil_from_caixa() -> Dict[str, Any]:
     session = requests.Session()
@@ -62,6 +62,7 @@ def fetch_lotofacil_from_caixa() -> Dict[str, Any]:
             logging.info(f"Status code da Caixa: {resp.status_code}")
 
             if resp.status_code == 403:
+                # Bloqueio pela Caixa
                 raise RuntimeError("A API da Caixa retornou 403 (bloqueio).")
 
             resp.raise_for_status()
@@ -85,6 +86,7 @@ def fetch_lotofacil_from_caixa() -> Dict[str, Any]:
 def get_lotofacil_result() -> Dict[str, Any]:
     now = time.time()
 
+    # Usa cache se estiver dentro do tempo
     if (
         _last_result_cache
         and (now - _last_result_cache.get("timestamp", 0)) < CACHE_TTL_SECONDS
@@ -111,13 +113,21 @@ def index():
             "endpoints": {
                 "lotofacil_ultimo_sem_barra": "/lotofacil/ultimo",
                 "lotofacil_ultimo_com_barra": "/lotofacil/ultimo/",
+                "lotofacil_raiz_sem_barra": "/lotofacil",
+                "lotofacil_raiz_com_barra": "/lotofacil/",
                 "ping": "/ping",
             },
         }
     )
 
 
-# Aceita COM e SEM barra no final
+# Aceita todas as variações:
+# /lotofacil
+# /lotofacil/
+/lotofacil/ultimo
+# /lotofacil/ultimo/
+@app.route("/lotofacil")
+@app.route("/lotofacil/")
 @app.route("/lotofacil/ultimo")
 @app.route("/lotofacil/ultimo/")
 def lotofacil_ultimo():
