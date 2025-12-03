@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lottery Genius</title>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #d7c7aa;
+      display: flex; justify-content: center; align-items: center;
+      min-height: 100vh;
+    }
+    .phone-wrapper {
+      width: min(95vw, 420px);
+      background: #000; border-radius: 40px; padding: 15px;
+      box-shadow: 0 14px 35px rgba(0,0,0,0.45);
+    }
+    .phone-screen {
+      background: radial-gradient(circle at top, #2b2417, #1b140e 50%, #100c07);
+      border-radius: 30px; padding: 16px; color: #fff;
+      display: flex; flex-direction: column; position: relative;
+    }
+    .title {
+      font-weight: 800; font-size: 1.9rem; color: #f0b52e;
+      text-transform: uppercase; line-height: 1.1;
+    }
+    .subtitle {
+      margin-top: 8px; font-size: 0.95rem; font-weight: bold;
+      text-transform: uppercase;
+    }
+    .ticket-area { margin-top: 15px; position: relative; }
+    .inner-phone {
+      background: #111; border-radius: 20px; padding: 10px;
+      display: flex; justify-content: center; align-items: center;
+    }
+    .ticket-image {
+      width: 100%; border-radius: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    }
+
+    form { margin: 0; }
+    .game-buttons {
+      position: absolute; left: -5px; top: 22%;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .game-button {
+      display: flex; align-items: center;
+      background: transparent; border: none; cursor: pointer;
+      padding: 2px;
+    }
+    .game-square {
+      width: 15px; height: 15px; background: #0091ff; border-radius: 2px;
+      margin-right: 5px;
+    }
+    .game-label {
+      font-size: 0.75rem; font-weight: bold; color: #ffffff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+    }
+
+    .resources-title {
+      margin-top: 18px; font-size: 1rem; font-weight: bold; color: #f0b52e;
+    }
+    .resources-list {
+      list-style: disc; padding-left: 20px; margin-top: 6px;
+    }
+    .resources-list li {
+      font-size: 0.8rem; margin-top: 4px;
+    }
+
+    .results-block {
+      margin-top: 15px; background: rgba(0,0,0,0.35);
+      border-radius: 10px; padding: 10px; font-size: 0.8rem;
+    }
+    .results-block h3 {
+      font-size: 0.9rem; margin-bottom: 6px; color: #f0b52e;
+    }
+    .freq-grid {
+      display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;
+    }
+    .freq-item {
+      background: rgba(0,0,0,0.45); padding: 3px 6px; border-radius: 6px;
+      font-size: 0.7rem;
+    }
+    .jogos-lista { margin-top: 6px; }
+    .jogos-lista li { margin-bottom: 6px; }
+
+    .download-link {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: #f0b52e;
+      color: #000;
+      font-weight: bold;
+      text-decoration: none;
+      font-size: 0.8rem;
+    }
+
+    .cols-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="phone-wrapper">
+    <div class="phone-screen">
+
+      <div class="title">LOTTERY GENIUS</div>
+
+      <div class="subtitle">
+        APRIMORE SUAS APOSTAS NA LOTOFÁCIL
+      </div>
+
+      <div class="ticket-area">
+        <form method="post">
+          <div class="game-buttons">
+            <button class="game-button" name="n_jogos" value="1">
+              <div class="game-square"></div>
+              <div class="game-label">1 JOGO</div>
+            </button>
+            <button class="game-button" name="n_jogos" value="5">
+              <div class="game-square"></div>
+              <div class="game-label">5 JOGOS</div>
+            </button>
+            <button class="game-button" name="n_jogos" value="10">
+              <div class="game-square"></div>
+              <div class="game-label">10 JOGOS</div>
+            </button>
+            <button class="game-button" name="n_jogos" value="15">
+              <div class="game-square"></div>
+              <div class="game-label">15 JOGOS</div>
+            </button>
+            <button class="game-button" name="n_jogos" value="20">
+              <div class="game-square"></div>
+              <div class="game-label">20 JOGOS</div>
+            </button>
+          </div>
+        </form>
+
+        <div class="inner-phone">
+          <img src="{{ url_for('static', filename='img/volante.png') }}"
+               class="ticket-image"
+               alt="Volante Lotofácil" />
+        </div>
+      </div>
+
+      <div class="resources-title">Recursos disponibilizados</div>
+      <ul class="resources-list">
+        <li>Estudos dos resultados recentes</li>
+        <li>Combinações otimizadas com critérios técnicos (pares, ímpares, primos, Fibonacci, bordas e outros padrões)</li>
+        <li>Ferramentas exclusivas para aprimorar as escolhas</li>
+        <li>Ambiente simples, intuitivo e atualizado</li>
+        <li>Acesso pelo número de celular (planejado para futuras versões)</li>
+      </ul>
+
+      <div class="results-block">
+        <h3>Números mais frequentes (últimos 80 concursos)</h3>
+        <div class="freq-grid">
+          {% for numero, qtd in freq_ordenada %}
+            <div class="freq-item">{{ numero }} → {{ qtd }}x</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="results-block">
+        <h3>Números quentes (top 10)</h3>
+        <div class="freq-grid">
+          {% for numero, qtd in hot %}
+            <div class="freq-item">{{ numero }} → {{ qtd }}x</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="results-block">
+        <h3>Números frios (10 que menos saem)</h3>
+        <div class="freq-grid">
+          {% for numero, qtd in cold %}
+            <div class="freq-item">{{ numero }} → {{ qtd }}x</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="results-block">
+        <h3>Último resultado da Lotofácil</h3>
+        {% if ultimo_resultado %}
+          <p>
+            Concurso <strong>{{ ultimo_resultado.concurso }}</strong> –
+            Data <strong>{{ ultimo_resultado.data }}</strong>
+          </p>
+          <p>
+            Dezenas:
+            {% for d in ultimo_resultado.dezenas %}
+              {{ "%02d"|format(d) }}
+            {% endfor %}
+          </p>
+        {% else %}
+          <p>Não foi possível carregar o último resultado.</p>
+        {% endif %}
+      </div>
+
+      {% if jogos_detalhados %}
+      <div class="results-block">
+        <h3>Jogos gerados (estratégicos)</h3>
+        <ul class="jogos-lista">
+          {% for jogo in jogos_detalhados %}
+            <li>
+              <strong>{{ loop.index }}º jogo:</strong>
+              {{ jogo.dezenas }}
+              <br />
+              <span>
+                Pares: {{ jogo.pares }},
+                Ímpares: {{ jogo.impares }},
+                Primos: {{ jogo.primos }},
+                Fibonacci: {{ jogo.fibo }},
+                Borda: {{ jogo.borda }},
+                Baixos (1–13): {{ jogo.baixos }},
+                Altos (14–25): {{ jogo.altos }}
+              </span>
+            </li>
+          {% endfor %}
+        </ul>
+        <a href="/download?n=20" class="download-link">
+          Baixar 20 jogos em TXT
+        </a>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+</body>
+</html>

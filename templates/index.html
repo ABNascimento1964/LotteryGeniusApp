@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <title>Lottery Genius - Lotofácil</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #111;
+            color: #f5f5f5;
+            font-size: 16px; /* fonte grande */
+            display: flex;
+            justify-content: center;
+        }
+
+        .page {
+            max-width: 1200px;
+            width: 100%;
+            padding: 16px;
+        }
+
+        .topo {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .banner {
+            flex: 1 1 320px;
+            background-color: #222;
+            border-radius: 24px;
+            padding: 16px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.7);
+        }
+
+        .banner-img {
+            width: 100%;
+            border-radius: 24px;
+            display: block;
+        }
+
+        .banner-titulo {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            color: #f5f5f5;
+            text-shadow: 0 0 10px #000;
+        }
+
+        .banner-titulo h1 {
+            margin: 0;
+            font-size: 28px;
+            color: #f5c542;
+            text-transform: uppercase;
+        }
+
+        .banner-titulo h2 {
+            margin: 8px 0 0;
+            font-size: 18px;
+        }
+
+        .lado-direito {
+            flex: 1 1 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .card {
+            background: #222;
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 0 12px rgba(0,0,0,0.6);
+        }
+
+        .card h3 {
+            margin-top: 0;
+            color: #f5c542;
+            font-size: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        select,
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #111;
+            color: #f5f5f5;
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 20px;
+            border-radius: 10px;
+            border: none;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            background: #f5a623;
+            color: #111;
+        }
+
+        .btn:hover {
+            background: #ffbe4a;
+        }
+
+        .btn-sec {
+            background: #444;
+            color: #f5f5f5;
+        }
+
+        .btn-sec:hover {
+            background: #666;
+        }
+
+        .linha-botoes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .frequencias-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 8px;
+            font-size: 15px;
+        }
+
+        .freq-item {
+            background: #111;
+            border-radius: 8px;
+            padding: 6px 8px;
+            text-align: center;
+        }
+
+        .freq-num {
+            font-weight: bold;
+            color: #f5c542;
+            font-size: 16px;
+        }
+
+        .freq-qtd {
+            font-size: 14px;
+            color: #ddd;
+        }
+
+        .jogos-lista {
+            margin-top: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .jogo-card {
+            background: #222;
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 15px;
+        }
+
+        .jogo-linha {
+            margin-bottom: 4px;
+        }
+
+        .dezenas {
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .jogo-analise {
+            font-size: 14px;
+            color: #ddd;
+        }
+
+        .rodape-download {
+            margin-top: 16px;
+            text-align: center;
+        }
+
+        .aviso-erro {
+            color: #ff8080;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                font-size: 15px;
+            }
+
+            .banner-titulo h1 {
+                font-size: 22px;
+            }
+
+            .banner-titulo h2 {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <div class="topo">
+        <!-- BANNER COM A IMAGEM DO CELULAR -->
+        <div class="banner">
+            <img src="{{ url_for('static', filename='img/volante.png') }}"
+                 alt="Lottery Genius - Lotofácil" class="banner-img">
+
+            <div class="banner-titulo">
+                <h1>Lottery Genius</h1>
+                <h2>Aprimore suas apostas na Lotofácil</h2>
+            </div>
+        </div>
+
+        <!-- CONTROLES E INFORMAÇÕES -->
+        <div class="lado-direito">
+            <!-- FORMULÁRIO DE GERAR JOGOS -->
+            <div class="card">
+                <h3>Gerar jogos estratégicos</h3>
+
+                <form method="POST">
+                    <label for="qtd_jogos">Quantidade de jogos</label>
+                    <select id="qtd_jogos" name="qtd_jogos">
+                        <option value="1">1 jogo</option>
+                        <option value="5">5 jogos</option>
+                        <option value="10" selected>10 jogos</option>
+                        <option value="15">15 jogos</option>
+                        <option value="20">20 jogos</option>
+                    </select>
+
+                    <label for="dezenas_por_jogo">Dezenas por jogo (15 a 20)</label>
+                    <select id="dezenas_por_jogo" name="dezenas_por_jogo">
+                        <option value="15">15 dezenas</option>
+                        <option value="16">16 dezenas</option>
+                        <option value="17">17 dezenas</option>
+                        <option value="18">18 dezenas</option>
+                        <option value="19">19 dezenas</option>
+                        <option value="20">20 dezenas</option>
+                    </select>
+
+                    <label for="modo">Modo de geração</label>
+                    <select id="modo" name="modo">
+                        <option value="A">Modo A - Números mais frequentes</option>
+                        <option value="B">Modo B - Mistura frequentes e atrasados</option>
+                    </select>
+
+                    <div class="linha-botoes">
+                        <button type="submit" class="btn">Gerar jogos agora</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ÚLTIMO RESULTADO -->
+            <div class="card">
+                <h3>Último resultado da Lotofácil</h3>
+                {% if ultimo_resultado %}
+                    <p>
+                        Concurso {{ ultimo_resultado.concurso }} —
+                        {{ ultimo_resultado.data }}
+                    </p>
+                    <p>
+                        Dezenas sorteadas:
+                        <span class="dezenas">
+                            {{ ultimo_resultado.dezenas | join(', ') }}
+                        </span>
+                    </p>
+                {% else %}
+                    <p class="aviso-erro">
+                        Não foi possível carregar o último resultado (site da loteria fora do ar ou mudou).
+                        Os jogos ainda são gerados normalmente com análise estatística interna.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- FREQUÊNCIAS -->
+    <div class="card" style="margin-top: 16px;">
+        <h3>Números mais frequentes (últimos concursos)</h3>
+        <div class="frequencias-grid">
+            {% for num in range(1, 26) %}
+                <div class="freq-item">
+                    <div class="freq-num">{{ '%02d' % num }}</div>
+                    <div class="freq-qtd">
+                        {{ frequencias[num] }} vez(es)
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- JOGOS GERADOS -->
+    <div class="card" style="margin-top: 16px;">
+        <h3>Jogos gerados (estratégicos)</h3>
+
+        {% if jogos %}
+            <div class="jogos-lista">
+                {% for jogo in jogos %}
+                    <div class="jogo-card">
+                        <div class="jogo-linha">
+                            <strong>{{ loop.index }}º jogo:</strong>
+                            <span class="dezenas">
+                                {{ jogo.dezenas | join(', ') }}
+                            </span>
+                        </div>
+                        <div class="jogo-analise">
+                            Pares: {{ jogo.analise.pares }}
+                            · Ímpares: {{ jogo.analise.impares }}
+                            · Baixos (1–13): {{ jogo.analise.baixos }}
+                            · Altos (14–25): {{ jogo.analise.altos }}
+                            · Primos: {{ jogo.analise.primos }}
+                            · Fibonacci: {{ jogo.analise.fibonacci }}
+                            · Borda: {{ jogo.analise.borda }}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p>Aguardando geração de jogos. Escolha as opções acima e clique em
+               <strong>Gerar jogos agora</strong>.</p>
+        {% endif %}
+
+        <div class="rodape-download">
+            <a href="{{ url_for('download_txt') }}" class="btn btn-sec">
+                Baixar jogos em TXT
+            </a>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>
