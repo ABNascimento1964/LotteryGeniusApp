@@ -1,276 +1,159 @@
-from flask import Flask, render_template, request, send_file
-import random
-import io
-from collections import Counter
-import requests
+import os
+import time
+import logging
+from typing import Optional, Dict, Any
 
+import requests
+from flask import Flask, jsonify
+
+# -----------------------------------------------------------------------------
+# Configuração básica
+# -----------------------------------------------------------------------------
 app = Flask(__name__)
 
-# -----------------------------
-# Conjuntos de números especiais
-# -----------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
 
-PRIMOS = {2, 3, 5, 7, 11, 13, 17, 19, 23}
-FIBONACCI = {1, 2, 3, 5, 8, 13, 21}
-BORDAS = {
-    1, 2, 3, 4, 5,
-    6, 10,
-    11, 15,
-    16, 20,
-    21, 22, 23, 24, 25
-}
+CAIXA_LOTOFACIL_URL = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil"
 
-# -----------------------------
-# Função para analisar um jogo
-# -----------------------------
+# Cache simples em memória para não bater na API toda hora
+_last_result_cache: Dict[str, Any] = {}
+CACHE_TTL_SECONDS = 60  # 1 minuto de cache
 
-def analisar_jogo(jogo):
-    pares = sum(1 for n in jogo if n % 2 == 0)
-    impares = len(jogo) - pares
-    primos = sum(1 for n in jogo if n in PRIMOS)
-    fib = sum(1 for n in jogo if n in FIBONACCI)
-    borda = sum(1 for n in jogo if n in BORDAS)
-    baixos = sum(1 for n in jogo if n <= 13)
-    altos = len(jogo) - baixos
 
+# -----------------------------------------------------------------------------
+# Funções auxiliares
+# -----------------------------------------------------------------------------
+def _get_headers() -> Dict[str, str]:
+    """
+    Headers para parecer um navegador normal.
+    Isso ajuda a evitar 403 da API da Caixa.
+    """
     return {
-        "pares": pares,
-        "impares": impares,
-        "primos": primos,
-        "fibonacci": fib,
-        "borda": borda,
-        "baixos": baixos,
-        "altos": altos,
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0 Safari/537.36"
+        ),
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": "https://loterias.caixa.gov.br/",
+        "Connection": "keep-alive",
     }
 
-# ----------------------------------
-# Carregar últimos resultados reais
-# (API oficial CAIXA)
-# ----------------------------------
 
-URL_LOTOFACIL_ULTIMO = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil"
-URL_LOTOFACIL_CONCURSO = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/{}"
-
-CAIXA_HEADERS = {
-    "accept": "application/json",
-    # user-agent fake de navegador, a API costuma exigir
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-}
-
-
-def carregar_ultimos_resultados(qtd_concursos=10):
+def fetch_lotofacil_from_caixa() -> Dict[str, Any]:
     """
-    Lê o ÚLTIMO resultado da Lotofácil direto da API da Caixa
-    e calcula as frequências dos últimos N concursos.
-
-    Retorna:
-      - ultimo_resultado: {"concurso": int, "data": str, "dezenas": [int,...]}
-      - frequencias: {1..25: quantidade nas N últimas extrações}
+    Busca o último resultado da Lotofácil diretamente da API da Caixa.
+    Faz algumas tentativas em caso de erro temporário.
+    Levanta exceção em caso de falha.
     """
-    # ---------- pega o último concurso ----------
-    try:
-        resp = requests.get(URL_LOTOFACIL_ULTIMO, headers=CAIXA_HEADERS, timeout=10)
-        resp.raise_for_status()
-        dados_ultimo = resp.json()
-    except Exception as exc:
-        print("Erro ao baixar último resultado da Lotofácil:", exc)
-        return None, {n: 0 for n in range(1, 26)}
+    session = requests.Session()
+    retries = 3
 
-    try:
-        numero_ultimo = int(dados_ultimo.get("numero"))
-        dezenas_ultimo_raw = (
-            dados_ultimo.get("listaDezenas")
-            or dados_ultimo.get("dezenasSorteadasOrdemSorteio")
-            or []
-        )
-        data_ultimo = dados_ultimo.get("dataApuracao")
-    except Exception as exc:
-        print("Erro ao interpretar dados do último concurso:", exc)
-        return None, {n: 0 for n in range(1, 26)}
-
-    dezenas_ultimo = []
-    for d in dezenas_ultimo_raw:
+    for attempt in range(1, retries + 1):
         try:
-            dezenas_ultimo.append(int(d))
-        except (TypeError, ValueError):
-            continue
-    dezenas_ultimo.sort()
-
-    ultimo_resultado = {
-        "concurso": numero_ultimo,
-        "data": data_ultimo,
-        "dezenas": dezenas_ultimo,
-    }
-
-    # ---------- frequências dos últimos N concursos ----------
-    primeiro_concurso = max(1, numero_ultimo - qtd_concursos + 1)
-    contador = Counter()
-
-    for concurso in range(primeiro_concurso, numero_ultimo + 1):
-        try:
-            url = URL_LOTOFACIL_CONCURSO.format(concurso)
-            r = requests.get(url, headers=CAIXA_HEADERS, timeout=10)
-            r.raise_for_status()
-            dados = r.json()
-
-            dezenas_raw = (
-                dados.get("listaDezenas")
-                or dados.get("dezenasSorteadasOrdemSorteio")
-                or []
+            logging.info(f"Tentando buscar Lotofácil na Caixa (tentativa {attempt}/{retries})")
+            resp = session.get(
+                CAIXA_LOTOFACIL_URL,
+                headers=_get_headers(),
+                timeout=10,
             )
 
-            for d in dezenas_raw:
-                try:
-                    n = int(d)
-                except (TypeError, ValueError):
-                    continue
-                if 1 <= n <= 25:
-                    contador[n] += 1
-        except Exception as exc:
-            print(f"Erro ao baixar concurso {concurso}:", exc)
-            continue
+            # Se der 403, loga bem explícito
+            if resp.status_code == 403:
+                logging.error(
+                    "403 Forbidden ao acessar a API da Caixa. "
+                    "Provavelmente bloqueio por IP/servidor. "
+                    "Tente usar proxy residencial ou outro provedor de hospedagem."
+                )
+                raise RuntimeError("Acesso proibido (403) pela API da Caixa.")
 
-    frequencias = {n: contador.get(n, 0) for n in range(1, 26)}
+            resp.raise_for_status()
 
-    return ultimo_resultado, frequencias
+            data = resp.json()
+            logging.info("Resultado da Lotofácil obtido com sucesso na API da Caixa.")
+            return data
 
-# -----------------------------
-# Geração de jogos
-# -----------------------------
+        except requests.exceptions.RequestException as e:
+            logging.warning(f"Erro ao acessar API da Caixa: {e}")
+            if attempt == retries:
+                raise
+            time.sleep(2)
 
-def gerar_jogos(qtd_jogos=10, dezenas_por_jogo=15, frequencias=None):
+    raise RuntimeError("Falha ao buscar resultado da Lotofácil após várias tentativas.")
+
+
+def get_lotofacil_result() -> Dict[str, Any]:
     """
-    Gera jogos usando TODAS as dezenas (1..25).
-    Usa as frequências como peso:
-      peso = frequencia + 1  (assim até quem não saiu ainda pode aparecer)
+    Retorna o último resultado da Lotofácil, com cache simples em memória.
     """
-    if frequencias is None:
-        frequencias = {n: 0 for n in range(1, 26)}
+    now = time.time()
 
-    numeros = list(range(1, 26))
-    pesos = [frequencias.get(n, 0) + 1 for n in numeros]
+    # Usa cache se ainda estiver válido
+    if (
+        _last_result_cache
+        and (now - _last_result_cache.get("timestamp", 0)) < CACHE_TTL_SECONDS
+    ):
+        return _last_result_cache["data"]
 
-    jogos = []
+    # Sem cache ou expirado: busca na API
+    data = fetch_lotofacil_from_caixa()
+    _last_result_cache["data"] = data
+    _last_result_cache["timestamp"] = now
+    return data
 
-    for _ in range(qtd_jogos):
-        # sorteio ponderado (pode repetir dentro do sorteio bruto)
-        sorteio_bruto = random.choices(
-            population=numeros,
-            weights=pesos,
-            k=dezenas_por_jogo * 2,  # pega um pouco a mais para evitar repetição
-        )
 
-        # remove repetidos mantendo aleatório
-        vistos = set()
-        unicos = []
-        for n in sorteio_bruto:
-            if n not in vistos:
-                vistos.add(n)
-                unicos.append(n)
-            if len(unicos) == dezenas_por_jogo:
-                break
+# -----------------------------------------------------------------------------
+# Rotas
+# -----------------------------------------------------------------------------
+@app.route("/")
+def index():
+    """
+    Rota principal – só pra saber que o serviço está no ar.
+    """
+    return jsonify(
+        {
+            "status": "ok",
+            "message": "LotteryGeniusApp está rodando 🚀",
+            "endpoints": {
+                "ultimo_resultado_lotofacil": "/lotofacil/ultimo",
+            },
+        }
+    )
 
-        # se mesmo assim faltar número, completa com o que sobrou
-        if len(unicos) < dezenas_por_jogo:
-            restantes = [n for n in numeros if n not in vistos]
-            if len(restantes) >= dezenas_por_jogo - len(unicos):
-                extra = random.sample(restantes, dezenas_por_jogo - len(unicos))
-                unicos.extend(extra)
 
-        unicos.sort()
-        estat = analisar_jogo(unicos)
-
-        jogos.append(
+@app.route("/lotofacil/ultimo")
+def lotofacil_ultimo():
+    """
+    Retorna o último resultado da Lotofácil em JSON.
+    """
+    try:
+        data = get_lotofacil_result()
+        return jsonify(
             {
-                "dezenas": unicos,
-                "analise": estat,
+                "success": True,
+                "data": data,
             }
         )
-
-    return jogos
-
-# -----------------------------
-# Rotas Flask
-# -----------------------------
-
-@app.route("/", methods=["GET", "POST"])
-def index():
-    # valores padrão
-    qtd_jogos = 10
-    dezenas_por_jogo = 15
-
-    if request.method == "POST":
-        try:
-            qtd_jogos = int(request.form.get("qtd_jogos", qtd_jogos))
-        except (TypeError, ValueError):
-            qtd_jogos = 10
-
-        try:
-            dezenas_por_jogo = int(
-                request.form.get("dezenas_por_jogo", dezenas_por_jogo)
-            )
-        except (TypeError, ValueError):
-            dezenas_por_jogo = 15
-
-        # limites de segurança
-        qtd_jogos = max(1, min(qtd_jogos, 50))
-        dezenas_por_jogo = max(15, min(dezenas_por_jogo, 20))
-
-    # carrega últimos concursos e frequências (agora direto da Caixa)
-    ultimo_resultado, frequencias = carregar_ultimos_resultados(qtd_concursos=10)
-
-    # gera jogos usando 1..25 com peso nas dezenas mais quentes
-    jogos = gerar_jogos(
-        qtd_jogos=qtd_jogos,
-        dezenas_por_jogo=dezenas_por_jogo,
-        frequencias=frequencias,
-    )
-
-    return render_template(
-        "index.html",
-        ultimo_resultado=ultimo_resultado,
-        frequencias=frequencias,
-        jogos=jogos,
-        qtd_jogos=qtd_jogos,
-        dezenas_por_jogo=dezenas_por_jogo,
-    )
+    except Exception as e:
+        logging.exception("Erro ao obter último resultado da Lotofácil.")
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": str(e),
+                }
+            ),
+            500,
+        )
 
 
-@app.route("/download_txt")
-def download_txt():
-    # lê parâmetros (se vierem da URL)
-    qtd_jogos = int(request.args.get("qtd_jogos", 20))
-    dezenas_por_jogo = int(request.args.get("dezenas_por_jogo", 15))
-
-    # garante limites
-    qtd_jogos = max(1, min(qtd_jogos, 50))
-    dezenas_por_jogo = max(15, min(dezenas_por_jogo, 20))
-
-    # gera novamente para o TXT
-    _, frequencias = carregar_ultimos_resultados(qtd_concursos=10)
-    jogos = gerar_jogos(
-        qtd_jogos=qtd_jogos,
-        dezenas_por_jogo=dezenas_por_jogo,
-        frequencias=frequencias,
-    )
-
-    buffer = io.StringIO()
-    buffer.write("Lottery Genius - Jogos gerados\n\n")
-    for idx, jogo in enumerate(jogos, start=1):
-        dezenas_str = ",".join(f"{n:02d}" for n in jogo["dezenas"])
-        buffer.write(f"Jogo {idx:02d}: {dezenas_str}\n")
-
-    mem = io.BytesIO()
-    mem.write(buffer.getvalue().encode("utf-8"))
-    mem.seek(0)
-
-    return send_file(
-        mem,
-        as_attachment=True,
-        download_name="jogos_lottery_genius.txt",
-        mimetype="text/plain",
-    )
-
-
+# -----------------------------------------------------------------------------
+# Main (para rodar localmente ou em produção)
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
