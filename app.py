@@ -1,13 +1,12 @@
-import os
 import time
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 import requests
 from flask import Flask, jsonify
 
 # -----------------------------------------------------------------------------
-# Configuração básica
+# Configuração básica do Flask
 # -----------------------------------------------------------------------------
 app = Flask(__name__)
 
@@ -16,8 +15,14 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-# Endpoint da Lotofácil na Caixa (domínio principal, sem servicebus2)
-CAIXA_LOTOFACIL_URL = "https://loterias.caixa.gov.br/portaldeloterias/api/lotofacil"
+# -----------------------------------------------------------------------------
+# Fonte ÚNICA de dados: JSON público da Lotofácil no GitHub
+# Projeto: guilhermeasn/loteria.json
+# -----------------------------------------------------------------------------
+GITHUB_LOTOFACIL_URL = (
+    "https://raw.githubusercontent.com/"
+    "guilhermeasn/loteria.json/master/data/lotofacil.json"
+)
 
 # Cache simples em memória
 _last_result_cache: Dict[str, Any] = {}
@@ -25,80 +30,66 @@ CACHE_TTL_SECONDS = 60  # 1 minuto
 
 
 # -----------------------------------------------------------------------------
-# Headers para parecer navegador (ajuda a evitar 403)
+# Busca o último resultado da Lotofácil no JSON público
 # -----------------------------------------------------------------------------
-def _get_headers() -> Dict[str, str]:
+def fetch_lotofacil_from_github() -> Dict[str, Any]:
+    """
+    Lê TODOS os resultados da Lotofácil no JSON lotofacil.json
+    e pega o concurso mais recente.
+
+    Formato do JSON (exemplo):
+        {
+          "3551": [1, 2, 3, ..., 25],
+          "3550": [...],
+          ...
+        }
+    """
+    logging.info(f"[GITHUB] Buscando JSON em {GITHUB_LOTOFACIL_URL}")
+    resp = requests.get(GITHUB_LOTOFACIL_URL, timeout=10)
+    logging.info(f"[GITHUB] Status code: {resp.status_code}")
+    resp.raise_for_status()
+
+    data = resp.json()
+
+    if not isinstance(data, dict) or not data:
+        raise RuntimeError("JSON da loteria.json veio vazio ou em formato inesperado.")
+
+    # Pega o maior número de concurso (último sorteio)
+    concursos_numericos: List[int] = [int(k) for k in data.keys()]
+    ultimo_concurso = max(concursos_numericos)
+
+    dezenas_raw = data[str(ultimo_concurso)]  # lista de ints ou strings
+    dezenas = [f"{int(d):02d}" for d in dezenas_raw]  # normaliza para "01", "02", ...
+
     return {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0 Safari/537.36"
-        ),
-        "Accept": "application/json, text/javascript, */*; q=0.01",
-        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Referer": "https://loterias.caixa.gov.br/",
-        "Connection": "keep-alive",
+        "source": "github-loteria.json",
+        "concurso": ultimo_concurso,
+        "dezenas": dezenas,
+        "raw": {str(ultimo_concurso): dezenas_raw},
     }
 
 
 # -----------------------------------------------------------------------------
-# Chamada da API da Caixa
-# -----------------------------------------------------------------------------
-def fetch_lotofacil_from_caixa() -> Dict[str, Any]:
-    session = requests.Session()
-    retries = 3
-
-    for attempt in range(1, retries + 1):
-        try:
-            logging.info(
-                f"Tentando buscar Lotofácil na Caixa (tentativa {attempt}/{retries})"
-            )
-            resp = session.get(
-                CAIXA_LOTOFACIL_URL,
-                headers=_get_headers(),
-                timeout=10,
-            )
-
-            logging.info(f"Status code da Caixa: {resp.status_code}")
-
-            if resp.status_code == 403:
-                # Bloqueio pela Caixa
-                raise RuntimeError("A API da Caixa retornou 403 (bloqueio).")
-
-            resp.raise_for_status()
-            data = resp.json()
-            logging.info("Resposta JSON obtida com sucesso.")
-            return data
-
-        except Exception as e:
-            logging.warning(f"Erro na tentativa {attempt}: {e}")
-            if attempt == retries:
-                logging.error("Falha definitiva ao chamar API da Caixa.")
-                raise
-            time.sleep(2)
-
-    raise RuntimeError("Falha ao buscar resultado da Lotofácil.")
-
-
-# -----------------------------------------------------------------------------
-# Função com cache simples
+# Função com cache em memória
 # -----------------------------------------------------------------------------
 def get_lotofacil_result() -> Dict[str, Any]:
     now = time.time()
 
-    # Usa cache se estiver dentro do tempo
+    # Se tem cache recente, usa ele
     if (
         _last_result_cache
         and (now - _last_result_cache.get("timestamp", 0)) < CACHE_TTL_SECONDS
     ):
-        logging.info("Usando resultado em cache.")
+        logging.info("Retornando resultado do cache.")
         return _last_result_cache["data"]
 
-    logging.info("Cache expirado ou vazio. Buscando na Caixa...")
-    data = fetch_lotofacil_from_caixa()
-    _last_result_cache["data"] = data
+    # Senão, busca de novo no GitHub
+    logging.info("Cache vazio/expirado. Buscando novo resultado no GitHub...")
+    result = fetch_lotofacil_from_github()
+
+    _last_result_cache["data"] = result
     _last_result_cache["timestamp"] = now
-    return data
+    return result
 
 
 # -----------------------------------------------------------------------------
@@ -106,47 +97,45 @@ def get_lotofacil_result() -> Dict[str, Any]:
 # -----------------------------------------------------------------------------
 @app.route("/")
 def index():
-    return jsonify(
-        {
-            "status": "ok",
-            "message": "LotteryGeniusApp está rodando 🚀",
-            "endpoints": {
-                "lotofacil_ultimo_sem_barra": "/lotofacil/ultimo",
-                "lotofacil_ultimo_com_barra": "/lotofacil/ultimo/",
-                "lotofacil_raiz_sem_barra": "/lotofacil",
-                "lotofacil_raiz_com_barra": "/lotofacil/",
-                "ping": "/ping",
-            },
+    return jsonify({
+        "status": "ok",
+        "message": "LotteryGeniusApp (fonte GitHub) está rodando 🚀",
+        "endpoints": {
+            "ping": "/ping",
+            "lotofacil_ultimo": "/lotofacil/ultimo",
+            "lotofacil_ultimo_com_barra": "/lotofacil/ultimo/",
         }
-    )
-
-
-# Aceita todas as variações:
-# /lotofacil
-# /lotofacil/
-/lotofacil/ultimo
-# /lotofacil/ultimo/
-@app.route("/lotofacil")
-@app.route("/lotofacil/")
-@app.route("/lotofacil/ultimo")
-@app.route("/lotofacil/ultimo/")
-def lotofacil_ultimo():
-    try:
-        data = get_lotofacil_result()
-        return jsonify({"success": True, "data": data})
-    except Exception as e:
-        logging.exception("Erro ao obter Lotofácil.")
-        return jsonify({"success": False, "error": str(e)}), 500
+    })
 
 
 @app.route("/ping")
 def ping():
-    return "pong - app está rodando"
+    # mensagem nova, pra diferenciar do código antigo
+    return "pong - app (fonte GitHub) está rodando"
+
+
+# Aceita COM e SEM barra no final
+@app.route("/lotofacil/ultimo")
+@app.route("/lotofacil/ultimo/")
+def lotofacil_ultimo():
+    try:
+        result = get_lotofacil_result()
+        return jsonify({
+            "success": True,
+            "result": result
+        })
+    except Exception as e:
+        logging.exception("Erro ao obter Lotofácil (GitHub).")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 
 # -----------------------------------------------------------------------------
-# Main (para rodar localmente; no Render o gunicorn usa app:app)
+# Main (para rodar localmente; no Render, usa o 'app' WSGI)
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
+    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
